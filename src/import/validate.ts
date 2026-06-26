@@ -1,4 +1,4 @@
-import type { DeviceTemplate, Port } from "../types";
+import type { DeviceTemplate, Port, SlotDefinition } from "../types";
 import { SIGNAL_LABELS, CONNECTOR_LABELS } from "../types";
 import { DEVICE_TYPE_TO_CATEGORY } from "../deviceTypeCategories";
 
@@ -9,6 +9,8 @@ const VALID_DIRECTIONS = new Set(["input", "output", "bidirectional"]);
 
 const MAX_STRING = 200;
 const MAX_PORTS = 500;
+const MAX_SLOTS = 128;        // mirror api/src/validate.ts
+const MAX_SLOT_STRING = 100;  // mirror api/src/validate.ts
 
 export interface TemplateValidationResult {
   /** True if the template can be saved as-is. */
@@ -91,6 +93,36 @@ export function validateTemplate(t: Partial<DeviceTemplate>): TemplateValidation
         errors.push(`${prefix} unknown connectorType "${port.connectorType}"`);
       }
     });
+  }
+
+  // Modular-chassis fields (mirror api/src/validate.ts). Both optional; validated only
+  // when present. slotFamily is the card→slot link, so a blank one is a hard error.
+  if (t.slotFamily != null) {
+    if (!isStr(t.slotFamily)) errors.push("slotFamily must be a non-empty string");
+    else if (t.slotFamily.length > MAX_SLOT_STRING) errors.push(`slotFamily must be ${MAX_SLOT_STRING} characters or fewer`);
+  }
+
+  if (t.slots != null) {
+    if (!Array.isArray(t.slots)) {
+      errors.push("slots must be an array");
+    } else {
+      if (t.slots.length > MAX_SLOTS) errors.push(`slots must have ${MAX_SLOTS} or fewer entries`);
+      t.slots.forEach((slot: Partial<SlotDefinition>, i: number) => {
+        const prefix = `slots[${i}]`;
+        if (!slot || typeof slot !== "object") {
+          errors.push(`${prefix} must be an object`);
+          return;
+        }
+        for (const field of ["id", "label", "slotFamily"] as const) {
+          const v = (slot as Record<string, unknown>)[field];
+          if (!isStr(v)) errors.push(`${prefix}.${field} is required`);
+          else if ((v as string).length > MAX_SLOT_STRING) errors.push(`${prefix}.${field} must be ${MAX_SLOT_STRING} characters or fewer`);
+        }
+        if (slot.defaultCardId != null && typeof slot.defaultCardId !== "string") {
+          errors.push(`${prefix}.defaultCardId must be a string`);
+        }
+      });
+    }
   }
 
   return { ok: errors.length === 0, errors, warnings };
