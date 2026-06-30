@@ -101,8 +101,61 @@ export default function DeviceTemplateSchemaPage() {
           <tr><td><code>unitCost</code></td><td>number</td><td>MSRP / typical unit cost in USD</td></tr>
           <tr><td><code>searchTerms</code></td><td>string[]</td><td>Extra keywords for the device library search</td></tr>
           <tr><td><code>color</code></td><td>string</td><td>Hex color (e.g. "#3b82f6") for the device card</td></tr>
+          <tr><td><code>slots</code></td><td>array</td><td>Card slots on a <strong>modular chassis</strong> — see <a href="#modular-chassis">Modular chassis &amp; expansion cards</a> below</td></tr>
+          <tr><td><code>slotFamily</code></td><td>string</td><td>On an <strong>expansion card</strong> (<code>deviceType: "expansion-card"</code>): which slot family it fits</td></tr>
         </tbody>
       </table>
+
+      <h2 id="modular-chassis">Modular chassis &amp; expansion cards</h2>
+      <p>
+        A modular frame (matrix chassis, LED processor, audio console with I/O cards, etc.) is
+        modelled as a <strong>chassis template</strong> that lists its card <code>slots</code>, plus
+        one <strong>card template</strong> per card. The chassis and card link by a single string,
+        the <code>slotFamily</code> — there are no cross-template IDs to manage. After import you
+        install cards into matching slots on the chassis device in-app; the card's ports then appear
+        on the chassis.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Field</th><th>On</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>slots[]</code></td><td>chassis</td><td>Each slot needs a non-empty <code>slotFamily</code>; <code>id</code> and <code>label</code> are auto-filled if you omit them. Optional <code>defaultCardId</code>, <code>hideWhenEmpty</code>. Max 128 slots.</td></tr>
+          <tr><td><code>slotFamily</code></td><td>card</td><td>String matching the chassis slots the card may occupy. Set it on an <code>expansion-card</code> so the card can install into matching slots; when present it must be non-empty.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Split the family by direction when a frame has dedicated input vs. output slots (e.g.
+        <code>"acme-frame-input"</code> / <code>"acme-frame-output"</code>) so an input card can't be
+        placed in an output slot. Chassis and cards can be imported together in one array.
+      </p>
+      <pre><code>{`[
+  {
+    "label": "Acme Modular Matrix",
+    "deviceType": "switcher",
+    "manufacturer": "Acme",
+    "modelNumber": "AMM-1600",
+    "referenceUrl": "https://acme.example/amm-1600",
+    "slots": [
+      { "id": "in-1",  "label": "Input Slot 1",  "slotFamily": "acme-frame-input" },
+      { "id": "out-1", "label": "Output Slot 1", "slotFamily": "acme-frame-output" }
+    ],
+    "ports": [ { "label": "AC Power", "signalType": "power", "direction": "input" } ]
+  },
+  {
+    "label": "Acme 4-Input HDMI Card",
+    "deviceType": "expansion-card",
+    "manufacturer": "Acme",
+    "modelNumber": "AMM-4I-HDMI",
+    "referenceUrl": "https://acme.example/amm-4i-hdmi",
+    "slotFamily": "acme-frame-input",
+    "ports": [ { "label": "Input 1", "signalType": "hdmi", "direction": "input", "connectorType": "hdmi" } ]
+  }
+]`}</code></pre>
+      <p>
+        <strong>CSV import does not carry slots</strong> — the row-per-port CSV format has no place
+        for them. Use JSON for modular chassis.
+      </p>
 
       <h2>Port-level fields</h2>
       <p>

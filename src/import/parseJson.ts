@@ -1,4 +1,4 @@
-import type { DeviceTemplate, Port } from "../types";
+import type { DeviceTemplate, Port, SlotDefinition } from "../types";
 import { DEVICE_TYPE_TO_CATEGORY } from "../deviceTypeCategories";
 import { validateTemplate } from "./validate";
 import { generatePortId, generateTemplateId, type ParseResult, type ParsedTemplate } from "./types";
@@ -73,8 +73,39 @@ function normalizeTemplate(raw: Record<string, unknown>): Partial<DeviceTemplate
     depthMm: num(raw.depthMm),
     weightKg: num(raw.weightKg),
     isVenueProvided: typeof raw.isVenueProvided === "boolean" ? raw.isVenueProvided : undefined,
+    // Modular chassis (slots[]) + expansion-card (slotFamily) fields. Preserved so a
+    // chassis and its cards can be bulk-imported and assembled into slots in-app; the
+    // card↔slot link is the slotFamily string. slotFamily is kept even when blank so the
+    // validator can reject it (a card with no family is unusable), mirroring api/src/validate.ts.
+    slotFamily: raw.slotFamily != null ? (raw.slotFamily as string) : undefined,
+    slots: normalizeSlots(raw.slots),
     ports: ports as Port[],
   };
+}
+
+/** Normalize an imported chassis's slot definitions. Backfills id/label (internal
+ * details a user shouldn't have to author) but keeps slotFamily verbatim — including
+ * blank — so validation flags a missing family. Malformed (non-object) entries are
+ * PRESERVED, not dropped, so the validator rejects them and the user is told, rather
+ * than silently losing data (parity with api/src/validate.ts). */
+function normalizeSlots(raw: unknown): SlotDefinition[] | undefined {
+  if (raw == null) return undefined;                       // absent → no slots
+  if (!Array.isArray(raw)) return raw as SlotDefinition[];  // non-array preserved so the validator rejects it
+  if (raw.length === 0) return undefined;                  // empty → no slots (validator-equivalent)
+  return (raw as unknown[]).map((s, i): SlotDefinition => {
+    if (!s || typeof s !== "object") return s as SlotDefinition; // kept so validation rejects it
+    const obj = s as Record<string, unknown>;
+    const slot: SlotDefinition = {
+      id: typeof obj.id === "string" && obj.id.trim() !== "" ? obj.id : `slot-${i + 1}-${Math.random().toString(36).slice(2, 6)}`,
+      label: typeof obj.label === "string" && obj.label.trim() !== "" ? obj.label : `Slot ${i + 1}`,
+      slotFamily: typeof obj.slotFamily === "string" ? obj.slotFamily : "",
+    };
+    // Keep defaultCardId verbatim when present so the validator rejects a non-string
+    // (parity with the API), rather than silently sanitizing it away.
+    if (obj.defaultCardId != null) slot.defaultCardId = obj.defaultCardId as string;
+    if (typeof obj.hideWhenEmpty === "boolean") slot.hideWhenEmpty = obj.hideWhenEmpty;
+    return slot;
+  });
 }
 
 function normalizePort(raw: Record<string, unknown>, index: number): Partial<Port> {
